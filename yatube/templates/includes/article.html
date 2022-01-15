@@ -1,0 +1,40 @@
+{% load thumbnail %}
+{% with request.resolver_match.view_name as view_name %}
+  <ul>
+    <li>
+    Автор: {{ post.author.get_full_name }}
+    </li>
+    <li>
+    Дата публикации: {{ post.pub_date|date:"d E Y" }}
+    </li>
+  </ul>
+  {% thumbnail post.image "960x339" crop="center" upscale=True as im %}
+    <img class="card-img my-2" src="{{ im.url }}">
+  {% endthumbnail %}
+  <p> {{ post.text }} </p>
+  <ul class="nav nav-pills">
+    <li class="nav-item  mx-2">
+      {% if view_name != "posts:group_list" %}
+        {% if post.group %}
+          <a class="btn btn-secondary" href="{{ post.group.get_absolute_url }}">
+            все записи группы {{ post.group }} ({{ post.group.get_posts_count }})
+          </a>
+        {% endif %}
+      {% endif %}
+    </li>
+    <li class="nav-item mx-2">
+      {% if view_name != "posts:profile" %}
+        <a class="btn btn-secondary" href="{% url 'posts:profile' username=post.author.username %}">
+          все посты пользователя {{ post.author.get_full_name }}
+        </a>
+      {% endif %}
+    </li>
+    <li class="nav-item mx-2">
+      {% if view_name != "posts:post_detail"  %}
+        <a class="btn btn-secondary" href="{{ post.get_absolute_url }}">
+          подробная информация
+        </a>
+      {% endif %}
+    </li>
+  </ul>
+{% endwith %}

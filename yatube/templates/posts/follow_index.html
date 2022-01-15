@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% with request.resolver_match.view_name as view_name %}
+  {% block title %}
+    <title>Последние обновления избранных авторов</title> 
+  {% endblock title %}
+  {% block content %}
+    {% if request.user.is_authenticated %}
+      {% include 'includes/switcher.html' %}
+    {% endif %}
+    {% load cache %}
+      <div class="container py-5">
+        {% for post in page_obj %}
+          <article>{% include "includes/article.html" %}</article>
+          {% if not forloop.last %}<hr>{% endif %}
+        {% endfor %}
+      </div>
+      <div class="container">
+        {% include "includes/paginator.html" %}
+      </div>
+  {% endblock content %}
+{% endwith %}
