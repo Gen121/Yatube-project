@@ -119,8 +119,8 @@ def profile_follow(request, username):
     """Adds this author to subscription list. Authorized users only."""
     user = request.user
     author = get_object_or_404(User, username=username)
-    if not Follow.objects.filter(user=user, author=author).exists(
-        ) and user != author:
+    follow = Follow.objects.filter(user=user, author=author).exists()
+    if not follow and user != author:
         follow_new = Follow(user=user, author=author)
         follow_new.save()
         return redirect('posts:profile', username=username)
