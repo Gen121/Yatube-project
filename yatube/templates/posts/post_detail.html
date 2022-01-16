@@ -33,14 +33,14 @@
     </aside>
     <article class="col-12 col-md-9">
       <p>
-        {% include "includes/article.html" %}
+        {% include "posts/includes/article.html" %}
       </p>
       {% if post.author == user %}
         <a class="btn btn-primary" href="{% url 'posts:post_edit' post_id=post.pk %}">
           редактировать запись
         </a>
       {% endif %}
-      {% include "includes/comments.html" %}
+      {% include "posts/includes/comments.html" %}
     </article>
     
   </div>
