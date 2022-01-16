@@ -2,6 +2,7 @@ import shutil
 import tempfile
 
 from django import forms
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -87,18 +88,38 @@ class ViewsTestCase(TestCase):
         super().tearDownClass()
         shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
 
+    def _get_response_run_contex_tests(self, page_name):
+        """return the response object and performs a contextual correctness."""
+        client = ViewsTestCase.client_author
+        response = client.get(
+            ViewsTestCase.pages_attributes[page_name]['reversed_name']
+        )
+        try:
+            first_post = response.context['page_obj'][0]
+        except KeyError:
+            first_post = response.context['post']
+        self.assertEqual(first_post.text, ViewsTestCase.post.text)
+        self.assertEqual(first_post.author, ViewsTestCase.user_author)
+        self.assertEqual(first_post.group, ViewsTestCase.group)
+        self.assertEqual(first_post.image, ViewsTestCase.post.image)
+        return response
+
     def test_reversed_name_uses_correct_template(self):
         """view functions uses right templates."""
-        client = self.client_author
+        client = ViewsTestCase.client_author
         for name, attribute in ViewsTestCase.pages_attributes.items():
             with self.subTest(name=name):
                 response = client.get(attribute['reversed_name'])
                 self.assertTemplateUsed(response, attribute['template'])
 
     def test_paginator(self):
-        """Paginator on page 'index', 'group_list', 'profile' work correct"""
-        client = ViewsTestCase.client_guest
-        tests_views = 'index', 'group_list', 'profile'
+        """Paginator on page 'index', 'group_list', 'profile' work correct."""
+        client = ViewsTestCase.client_not_author
+        client.get(reverse(
+            'posts:profile_follow',
+            kwargs={'username': ViewsTestCase.user_author.username}
+        ))
+        tests_views = 'index', 'group_list', 'profile', 'follow_index'
         posts_list = [
             Post(
                 text=f'Post {num}',
@@ -120,79 +141,28 @@ class ViewsTestCase(TestCase):
 
     def test_index_page_show_correct_context(self):
         """The home template is formed with the right context."""
-        client = ViewsTestCase.client_author
-        response = client.get(
-            ViewsTestCase.pages_attributes['index']['reversed_name'], {
-                'page': 2})
-        first_post = response.context['page_obj'][0]
-        self.assertEqual(first_post.text, ViewsTestCase.post.text)
-        self.assertEqual(first_post.author, ViewsTestCase.user_author)
-        self.assertEqual(first_post.group, ViewsTestCase.group)
-        self.assertEqual(first_post.image, ViewsTestCase.post.image)
-
-    def test_follow_index_page_shows_correct_context(self):
-        user_another_author = User.objects.create(username='Another_author')
-        client_another_author = Client()
-        client_another_author.force_login(user_another_author)
-        post_author = Post.objects.create(
-            text='Test_post_author',
-            author=ViewsTestCase.user_author,
-        )
-        post_another_author = Post.objects.create(
-            text='Test_post_from_another_author',
-            author=user_another_author,
-        )
-        ViewsTestCase.client_not_author.get(reverse(
-            'posts:profile_follow',
-            kwargs={'username': user_another_author.username}
-        ))
-        response = ViewsTestCase.client_not_author.get(
-            ViewsTestCase.pages_attributes['follow_index']['reversed_name']
-        )
-        first_post = response.context['page_obj'][0]
-        self.assertEqual(first_post.text, post_another_author.text)
-        self.assertEqual(first_post.author, user_another_author)
-        self.assertIn(post_another_author, response.context['page_obj'])
-        self.assertNotIn(post_author, response.context['page_obj'])
+        ViewsTestCase._get_response_run_contex_tests(self, 'index')
 
     def test_group_list_page_return_correct_context(self):
         """The home template is formed with the right context."""
-        client = self.client_author
-        response = client.get(
-            ViewsTestCase.pages_attributes['group_list']['reversed_name'])
-        first_post = response.context['page_obj'][0]
-        self.assertEqual(first_post.text, ViewsTestCase.post.text)
-        self.assertEqual(first_post.author, ViewsTestCase.user_author)
-        self.assertEqual(first_post.group, ViewsTestCase.group)
-        self.assertEqual(first_post.image, ViewsTestCase.post.image)
+        response = ViewsTestCase._get_response_run_contex_tests(
+            self, 'group_list')
         for post in response.context['page_obj']:
             self.assertEqual(post.group, ViewsTestCase.group)
 
     def test_profile_page_return_correct_context(self):
         """The profile template is formed with the right context"""
-        client = ViewsTestCase.client_author
+        response = ViewsTestCase._get_response_run_contex_tests(
+            self, 'profile')
         author = ViewsTestCase.user_author
-        response = client.get(
-            ViewsTestCase.pages_attributes['profile']['reversed_name'])
         context = response.context['page_obj'][:PAGINATOR_NUM_PAGE]
-        first_post = response.context['page_obj'][0]
-        self.assertEqual(first_post.text, ViewsTestCase.post.text)
-        self.assertEqual(first_post.author, ViewsTestCase.user_author)
-        self.assertEqual(first_post.group, ViewsTestCase.group)
-        self.assertEqual(first_post.image, ViewsTestCase.post.image)
         expected_context = [
             x for x in Post.objects.filter(author=author)[:PAGINATOR_NUM_PAGE]]
         self.assertEqual(context, expected_context)
 
     def test_post_detail_page_return_correct_context(self):
         """The post_detail template is formed with the right post"""
-        client = ViewsTestCase.client_guest
-        expected_post = ViewsTestCase.post
-        response = client.get(
-            ViewsTestCase.pages_attributes['post_detail']['reversed_name'])
-        context = response.context['post']
-        self.assertEqual(context, expected_post)
-        self.assertEqual(context.image, expected_post.image)
+        ViewsTestCase._get_response_run_contex_tests(self, 'post_detail')
 
     def test_post_create_page_return_correct_context(self):
         """The create page template is formed with the right form"""
@@ -246,12 +216,13 @@ class ViewsTestCase(TestCase):
             author=ViewsTestCase.user_author).delete()
 
     def test_cache_on_index_page(self):
+        """Test the cache on index page"""
         client = ViewsTestCase.client_author
         response_first = client.get(
             ViewsTestCase.pages_attributes['index']['reversed_name']
         )
         content_first = response_first.content
-        Post.objects.create(
+        test_post = Post.objects.create(
             text='test_cache_post',
             author=ViewsTestCase.user_author,)
         response_second = client.get(
@@ -259,22 +230,94 @@ class ViewsTestCase(TestCase):
         )
         content_second = response_second.content
         self.assertEqual(content_first, content_second, '<Page is not cached>')
+        cache.clear()
+        response_third = client.get(
+            ViewsTestCase.pages_attributes['index']['reversed_name']
+        )
+        self.assertIn(test_post,
+                      response_third.context['page_obj'],
+                      '<Post was not added in cotext>', )
 
-    def test_authorized_user_can_follow_unfollow(self):
-        """Test user can subscribeand unsubscribe from other users."""
-        ViewsTestCase.client_not_author.get(reverse(
+
+class FollowTestCase(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user_author = User.objects.create(username='Author')
+        cls.client_user_author = Client()
+        cls.client_user_author.force_login(FollowTestCase.user_author)
+
+        cls.user_second = User.objects.create(username='Second')
+        cls.client_user_second = Client()
+        cls.client_user_second.force_login(FollowTestCase.user_second)
+
+        cls.user_third = User.objects.create(username='Third')
+        cls.client_user_third = Client()
+        cls.client_user_third.force_login(FollowTestCase.user_third)
+
+    def test_authorized_user_can_follow(self):
+        """Test this user can subscribe for other users."""
+        FollowTestCase.client_user_second.get(reverse(
             'posts:profile_follow',
-            kwargs={'username': ViewsTestCase.user_author.username}
+            kwargs={'username': FollowTestCase.user_author.username}
         ))
         self.assertTrue(Follow.objects.filter(
-            user=ViewsTestCase.user_not_author,
-            author=ViewsTestCase.user_author
+            user=FollowTestCase.user_second,
+            author=FollowTestCase.user_author
         ).exists())
-        ViewsTestCase.client_not_author.get(reverse(
+
+    def test_authorized_user_can_unfollow(self):
+        """Test this user can unsubscribe/"""
+        Follow.objects.create(user=FollowTestCase.user_second,
+                              author=FollowTestCase.user_author)
+        FollowTestCase.client_user_second.get(reverse(
             'posts:profile_unfollow',
-            kwargs={'username': ViewsTestCase.user_author.username}
+            kwargs={'username': FollowTestCase.user_author.username}
         ))
         self.assertFalse(Follow.objects.filter(
-            user=ViewsTestCase.user_not_author,
-            author=ViewsTestCase.user_author
+            user=FollowTestCase.user_second,
+            author=FollowTestCase.user_author
         ).exists())
+
+    def test_follow_index_page_shows_correct_context(self):
+        """The follow_index template is formed with the right context."""
+        Follow.objects.create(user=FollowTestCase.user_second,
+                              author=FollowTestCase.user_author)
+        post_user_author = Post.objects.create(
+            text='Test_post_author',
+            author=FollowTestCase.user_author, )
+        response = FollowTestCase.client_user_second.get(
+            reverse('posts:follow_index')
+        )
+        first_post = response.context['page_obj'][0]
+        self.assertEqual(first_post.text, post_user_author.text)
+        self.assertEqual(first_post.author, FollowTestCase.user_author)
+        self.assertIn(post_user_author, response.context['page_obj'])
+
+    def test_follow_index_page_didnt_shows_uncorrect_context(self):
+        """The follow_index template uninclude unfollow authors posts."""
+        Follow.objects.create(user=FollowTestCase.user_author,
+                              author=FollowTestCase.user_third)
+        Follow.objects.create(user=FollowTestCase.user_second,
+                              author=FollowTestCase.user_author)
+        Follow.objects.create(user=FollowTestCase.user_third,
+                              author=FollowTestCase.user_second)
+        post_user_author = Post.objects.create(
+            text='Test_post_author',
+            author=FollowTestCase.user_author, )
+        post_user_second = Post.objects.create(
+            text='Test_post_from_second_user',
+            author=FollowTestCase.user_second, )
+        post_user_third = Post.objects.create(
+            text='Test_post_from_third_user',
+            author=FollowTestCase.user_third, )
+        test_posts = post_user_author, post_user_second, post_user_third
+        expected_posts_for_clients = {
+            FollowTestCase.client_user_author: post_user_third,
+            FollowTestCase.client_user_second: post_user_author,
+            FollowTestCase.client_user_third: post_user_second, }
+        for user, expected_post in expected_posts_for_clients.items():
+            response = user.get(reverse('posts:follow_index'))
+            for post in (i for i in test_posts if i != expected_post):
+                with self.subTest(user=user, post=post):
+                    self.assertNotIn(post, response.context['page_obj'])

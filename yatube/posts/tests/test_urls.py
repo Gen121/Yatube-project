@@ -35,22 +35,33 @@ class UrlsTestCase(TestCase):
 
         cls.author_routes_status_code = {
             '/': HTTPStatus.OK,
+            '/follow/': HTTPStatus.OK,
             f'/group/{cls.group.slug}/': HTTPStatus.OK,
             f'/profile/{cls.user_author.username}/': HTTPStatus.OK,
             f'/posts/{cls.post.id}/': HTTPStatus.OK,
+            f'/posts/{cls.post.id}/comment/': HTTPStatus.FOUND,
             '/create/': HTTPStatus.OK,
             f'/posts/{cls.post.id}/edit/': HTTPStatus.OK,
+            f'profile/{cls.user_not_author}/follow/': HTTPStatus.NOT_FOUND,
+            f'profile/{cls.user_not_author}/unfollow/': HTTPStatus.NOT_FOUND,
             '/unexisting_page/': HTTPStatus.NOT_FOUND,
         }
 
         cls.not_author_routes_status_code = deepcopy(
             cls.author_routes_status_code)
-        cls.not_author_routes_status_code['/posts/1/edit/'] = HTTPStatus.FOUND
+        cls.not_author_routes_status_code[
+            f'/posts/{cls.post.id}/edit/'] = HTTPStatus.FOUND
+        cls.not_author_routes_status_code[
+            f'profile/{cls.user_not_author}/follow/'] = HTTPStatus.NOT_FOUND
 
         cls.guest_routes_status_code = deepcopy(
             cls.author_routes_status_code)
-        cls.guest_routes_status_code['/posts/1/edit/'] = HTTPStatus.FOUND
+        cls.guest_routes_status_code[
+            f'/posts/{cls.post.id}/edit/'] = HTTPStatus.FOUND
         cls.guest_routes_status_code['/create/'] = HTTPStatus.FOUND
+        cls.guest_routes_status_code[
+            f'/posts/{cls.post.id}/comment/'] = HTTPStatus.FOUND
+        cls.guest_routes_status_code['/follow/'] = HTTPStatus.FOUND
 
         cls.routes_status_code_list = [
             cls.author_routes_status_code,
@@ -63,6 +74,8 @@ class UrlsTestCase(TestCase):
         cls.pages_attributes = {
             'index': {'url': '/',
                       'template': 'posts/index.html', },
+            'follow_index': {'url': '/follow/',
+                             'template': 'posts/follow_index.html', },
             'group_list': {'url': f'/group/{cls.group.slug}/',
                            'template': 'posts/group_list.html', },
             'profile': {'url': f'/profile/{cls.user_author.username}/',

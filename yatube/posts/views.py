@@ -41,9 +41,8 @@ def profile(request, username):
     author = get_object_or_404(User, username=username)
     post_list = author.posts.all()
     page_obj = get_page_obj(request, post_list)
-    following = None
-    if user.is_authenticated:
-        following = Follow.objects.filter(user=user, author=author).exists()
+    following = user.is_authenticated and Follow.objects.filter(
+        user=user, author=author).exists()
     context = {'page_obj': page_obj, 'author': author, 'following': following}
     return render(request, template, context)
 
@@ -119,11 +118,8 @@ def profile_follow(request, username):
     """Adds this author to subscription list. Authorized users only."""
     user = request.user
     author = get_object_or_404(User, username=username)
-    follow = Follow.objects.filter(user=user, author=author).exists()
-    if not follow and user != author:
-        follow_new = Follow(user=user, author=author)
-        follow_new.save()
-        return redirect('posts:profile', username=username)
+    if user != author:
+        Follow.objects.get_or_create(user=user, author=author)
     return redirect('posts:profile', username=username)
 
 
@@ -132,7 +128,7 @@ def profile_unfollow(request, username):
     """Deletes this author from subscription list. Authorized users only."""
     user = request.user
     author = get_object_or_404(User, username=username)
-    if Follow.objects.filter(user=user, author=author).exists():
-        Follow.objects.get(user=user, author=author).delete()
-        return redirect('posts:profile', username=username)
+    follow = Follow.objects.filter(user=user, author=author)
+    if follow.exists():
+        follow.delete()
     return redirect('posts:profile', username=username)
