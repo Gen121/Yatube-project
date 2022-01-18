@@ -257,23 +257,33 @@ class FollowTestCase(TestCase):
 
     def test_authorized_user_can_follow(self):
         """Test this user can subscribe for other users."""
+        initial_follow_count = Follow.objects.count()
         FollowTestCase.client_user_second.get(reverse(
             'posts:profile_follow',
             kwargs={'username': FollowTestCase.user_author.username}
         ))
+        test_follow_count = Follow.objects.count()
+        added_follow_count = 1
+        self.assertEqual(initial_follow_count + added_follow_count,
+                         test_follow_count)
         self.assertTrue(Follow.objects.filter(
             user=FollowTestCase.user_second,
             author=FollowTestCase.user_author
         ).exists())
 
     def test_authorized_user_can_unfollow(self):
-        """Test this user can unsubscribe/"""
+        """Test this user can unsubscribe."""
         Follow.objects.create(user=FollowTestCase.user_second,
                               author=FollowTestCase.user_author)
+        initial_follow_count = Follow.objects.count()
         FollowTestCase.client_user_second.get(reverse(
             'posts:profile_unfollow',
             kwargs={'username': FollowTestCase.user_author.username}
         ))
+        test_follow_count = Follow.objects.count()
+        deleted_follow_count = 1
+        self.assertEqual(initial_follow_count - deleted_follow_count,
+                         test_follow_count)
         self.assertFalse(Follow.objects.filter(
             user=FollowTestCase.user_second,
             author=FollowTestCase.user_author
