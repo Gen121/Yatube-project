@@ -42,7 +42,7 @@ pip install -r requirements.txt
 создать файл .env с ключом:
 
 ```
-SECRET_KEY=you_shall_not_pass
+SECRET_KEY=you_shall_not_pass_for_example
 ```
 
 Выполнить миграции:
